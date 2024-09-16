@@ -21,7 +21,7 @@ pacl.check_zarr(["path/to/zarr/store/data1.zarr", "path/to/zarr/store/data2.zarr
 Running either line of Python code will print out various checks and an image with multiple diagnostic plots.
 
 ## Diagnostics and Checks
-No checks are preformed on single zarr stores. Rather, a series of plots are made for the user to verify data integrity qualatatively. The following diagnostic plots are produced:
+No checks are preformed on single zarr stores. Rather, a series of plots are made for the user to verify data integrity qualitatively. The following diagnostic plots are produced:
 1. A line plot of timeseries data averaged over all spatial dimensions. Other dimensions, such as "member" are plotted as separate lines. If there are multiple other dimensions, then their combinations are plotted.
 2. Instead of a line plot, a heat map is generated using the same specifications as #1.
 3. A map of the mean of all dimensions other than latitude and longitude for the entire time period.
