@@ -57,6 +57,7 @@ def check_single(path: str, debugging: False):
         data_.mean(dim=spatial_dims).plot.line(x='time', hue='new_dim')
     else:
         data.mean(dim=spatial_dims).plot.line(x='time', hue=other_dimensions[0])
+    plt.suptitle("Mean over spatial dimensions")
     plt.show()
 
     # TASK 2
@@ -65,20 +66,24 @@ def check_single(path: str, debugging: False):
         data_.mean(dim=spatial_dims).plot.pcolormesh(x='time', y='new_dim')
     else:
         data.mean(dim=spatial_dims).plot.pcolormesh(x='time', y=other_dimensions[0])
+    plt.suptitle("Mean over spatial dimensions")
     plt.show()
 
     # TASK 3
     other_dimensions = other_dimensions + ['time']
     data.mean(dim=other_dimensions).plot()
+    plt.suptitle("Mean over entire time period and all other dimensions")
     plt.show()
 
     # TASK 4
     other_dimensions.remove('time')
     data.isel(time=0).mean(dim=other_dimensions).plot()
+    plt.suptitle("First timestep, mean over all other dimensions")
     plt.show() 
 
     # TASK 5
     data.isel(time=-1).mean(dim=other_dimensions).plot()
+    plt.suptitle("Last timestep, mean over all other dimensions")
     plt.show() 
 
 
