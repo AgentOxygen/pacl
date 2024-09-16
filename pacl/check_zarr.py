@@ -33,34 +33,53 @@ def check_single(path: str, debugging: False):
         if 'bnds' not in ds[var].dims:
             data_vars.append(ds[var])
 
+    if len(data_vars) > 1: 
+        print("More than one valid data variable in zarr store")
+        return 
+    
+    data = data_vars[0]
+
+
     # TASK 1
     # TODO: will there ever be more than one valid data variable in a zarr store?
-    for data in data_vars: 
-        if debugging: 
-            print(data)
-            print()
+    if debugging: 
+        print(data)
+        print()
 
-        # TODO: all possible spatial dimensions are ? Check if all of the data variable actually has all of these dimensions? 
-        spatial_dims = ["lat", "lon"]
-        other_dimensions = [dim for dim in data.dims if dim not in spatial_dims and dim != 'time']
+    # TODO: all possible spatial dimensions are ? Check if all of the data variable actually has all of these dimensions? 
+    spatial_dims = ["lat", "lon"]
+    other_dimensions = [dim for dim in data.dims if dim not in spatial_dims and dim != 'time']
 
-        # Take the mean over the spatial dimensions and plot each combination of the other_dimensions as a line with the x-axis being "time"
-        if len(other_dimensions) > 1:
-            # We need to group our dataarray so it has one singular new dimension that has all combinations of the other_dimensions
-            data = data.stack(new_dim=other_dimensions)
-            data.mean(dim=spatial_dims).plot.line(x='time', hue='new_dim')
-        else:
-            data.mean(dim=spatial_dims).plot.line(x='time', hue=other_dimensions[0])
-        plt.show()
+    # Take the mean over the spatial dimensions and plot each combination of the other_dimensions as a line with the x-axis being "time"
+    if len(other_dimensions) > 1:
+        # We need to group our dataarray so it has one singular new dimension that has all combinations of the other_dimensions
+        data_ = data.stack(new_dim=other_dimensions)
+        data_.mean(dim=spatial_dims).plot.line(x='time', hue='new_dim')
+    else:
+        data.mean(dim=spatial_dims).plot.line(x='time', hue=other_dimensions[0])
+    plt.show()
 
     # TASK 2
-    for data in data_vars:
-        if len(other_dimensions) > 1:
-            data = data.stack(new_dim=other_dimensions)
-            data.mean(dim=spatial_dims).plot.pcolormesh(x='time', y='new_dim')
-        else:
-            data.mean(dim=spatial_dims).plot.pcolormesh(x='time', y=other_dimensions[0])
-        plt.show()
+    if len(other_dimensions) > 1:
+        data_ = data.stack(new_dim=other_dimensions)
+        data_.mean(dim=spatial_dims).plot.pcolormesh(x='time', y='new_dim')
+    else:
+        data.mean(dim=spatial_dims).plot.pcolormesh(x='time', y=other_dimensions[0])
+    plt.show()
+
+    # TASK 3
+    other_dimensions = other_dimensions + ['time']
+    data.mean(dim=other_dimensions).plot()
+    plt.show()
+
+    # TASK 4
+    other_dimensions.remove('time')
+    data.isel(time=0).mean(dim=other_dimensions).plot()
+    plt.show() 
+
+    # TASK 5
+    data.isel(time=-1).mean(dim=other_dimensions).plot()
+    plt.show() 
 
 
 
