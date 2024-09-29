@@ -15,6 +15,9 @@ Last Header Update:
 import xarray as xr
 import matplotlib.pyplot as plt
 import numpy as np
+from colorama import Fore, Style
+from typing import Callable
+
 
 def check_single(path: str, verbose: False):
     """Check a single zarr store"""
@@ -109,23 +112,137 @@ def check_single(path: str, verbose: False):
     plt.suptitle(f"Last timestep, mean over all other dimensions for \n{path}")
     plt.figtext(0.5, 0, f"Plot generated for {path}", horizontalalignment='center', fontsize=7) 
     plt.show() 
-
-def print_issue(issue: str, ds1: xr.Dataset, ds2: xr.Dataset):
-    print(f"Not all zarr stores have the same {issue}. Here is the information for two of the problematic zarr stores.")
-    print("First dataset information: ")
-    print(ds1.info())
-    print("\n\n")
-    print("Second dataset information: ")
-    print(ds2.info())
     
 def check_spatial_coords(ds1: xr.Dataset, ds2: xr.Dataset) -> bool:
     # Check that the spatial coordinates (lat, lon, lev) are equivalent in shape and value.
 
+    # Check that they have the same spatial dims
     possible_spatial_dims = ["lat", "lon", "lev", "latitude", "longitude", "level"]
-    spatial_dims = [dim for dim in possible_spatial_dims if dim in ds1.dims]
+    spatial_dims_1 = [dim for dim in possible_spatial_dims if dim in ds1.dims]
+    spatial_dims_2 = [dim for dim in possible_spatial_dims if dim in ds2.dims]
+
+    if spatial_dims_1 != spatial_dims_2:
+        return False
+    
+    # Check that the spatial dims have the same shape
+    for dim in spatial_dims_1:
+        if ds1[dim].shape != ds2[dim].shape:
+            return False
+        
+    # Check that the spatial dims have the same values
+    for dim in spatial_dims_1:
+        if not np.array_equal(ds1[dim].values, ds2[dim].values):
+            return False
+        
+    return True
+
+def check_vars_same_name(ds1: xr.Dataset, ds2: xr.Dataset) -> bool:
+    # Check that the variables in the datasets have the same name
+
+    vars_1 = list(ds1.data_vars.keys())
+    vars_2 = (ds2.data_vars.keys())
+
+    if vars_1 != vars_2:
+        return False
+
+    return True
+
+def check_time(ds1: xr.Dataset, ds2: xr.Dataset) -> bool:
+    # Check that the time coordinates are monotonic and that all datasets use the same calendar
+    
+    if not ds1.time.to_index().is_monotonic_increasing:
+        return False
+    
+    if not ds2.time.to_index().is_monotonic_increasing:
+        return False
+    
+    if ds1.time.encoding['calendar'] != ds2.time.encoding['calendar']:
+        return False
+    
+    return True
+
+def check_units(ds1: xr.Dataset, ds2: xr.Dataset) -> bool:
+    # Check that the units attributes are equivalent for each variable in all datasets
+
+    for var in ds1.data_vars:
+        if 'bnds' in var: 
+            continue 
+        if 'units' not in ds1[var].attrs:
+            print("No unit attribute for variable: ", var)
+            print(ds1[var].attrs)
+            return False
+        if var not in ds2.data_vars:
+            return False
+        if ds1[var].attrs["units"] != ds2[var].attrs["units"]:
+            return False
+
+    return True
+
+def find_majority_ds(datasets: list, check_equiv: Callable) -> int: 
+    # Find the majority dataset in a list of datasets using Boyer–Moore majority vote algorithm
+    # This function will be used to determine which dataset to compare the others to
+    # We will compare all datasets to the majority dataset to ensure that they are equivalent
+
+    majority_ds = -1 
+    counter = 0
+
+    for i, ds in enumerate(datasets): 
+        if counter == 0:
+            majority_ds = i
+            counter += 1
+            continue
+
+        if check_equiv(datasets[majority_ds], ds):
+            counter += 1
+        else:
+            counter -= 1
+
+    # count if majority_ds is actually the majority 
+    counter = 0
+    for ds in datasets:
+        if check_equiv(datasets[majority_ds], ds):
+            counter += 1
+    
+    if counter <= len(datasets) / 2:
+        return -1
+
+    return majority_ds
+
+def find_different_datasets(datasets: list, check_equiv: Callable) -> list:
+    # Find the datasets that are different from the majority dataset
+    # It will return [-1] if no majority dataset is found
+    majority_ds = find_majority_ds(datasets, check_equiv)
+    if majority_ds == -1:
+        return [-1]
+
+    different_datasets = []
+    for i, ds in enumerate(datasets):
+        if not check_equiv(datasets[majority_ds], ds):
+            different_datasets.append(i)
+
+    return different_datasets
+
+def get_check_msg(different_datasets: list, datasets: list, check_num: int, checks: list, msgs: list) -> str: 
+    # The first msg is what it say if the check failed. The second msg is what it says if the check passed
+
+    if different_datasets == [-1]:
+        checks[check_num] = False
+        check_msg = Fore.RED + f"Check {check_num+1} failed: {msgs[0]} A majority of them are different from each other.\n" + Style.RESET_ALL
+    elif len(different_datasets) == 0:
+        checks[check_num] = True
+        check_msg = Fore.GREEN + f"Check {check_num+1} passed: {msgs[1]}\n" + Style.RESET_ALL
+    else: 
+        dataset_names = [datasets[i] for i in different_datasets]
+        checks[check_num] = False
+        check_msg = f"Check {check_num+1} failed: {msgs[0]} The following datasets ({len(different_datasets)} / {len(datasets)}) are different from the majority dataset: " + str(dataset_names) + "\n"
+
+    return check_msg
 
 
 def check_paths(paths: list, verbose: False):
+
+    checks_passed = np.zeros(4)
+    summary_msg = ""
     
     datasets = []
     for path in paths:
@@ -133,31 +250,28 @@ def check_paths(paths: list, verbose: False):
         datasets.append(ds)
 
     # Check 1 
-    possible_spatial_dims = ["lat", "lon", "lev", "latitude", "longitude", "level"]
-    spatial_dims = [dim for dim in possible_spatial_dims if dim in datasets[0].dims]
-    checks_failed = 0
+    different_datasets = find_different_datasets(datasets, check_spatial_coords)
+    msgs = ["Spatial coordinates are not equivalent across all datasets.", "Spatial coordinates are equivalent across all datasets."]
+    summary_msg += get_check_msg(different_datasets, datasets, 0, checks_passed, msgs)
 
-    # check that every zarr store has the same spatial dimensions
-    for ds in datasets[1:]:
-        if spatial_dims != [dim for dim in possible_spatial_dims if dim in ds.dims]:
-            print_issue("spatial dimensions", datasets[0], ds)
-            checks_failed += 1
-        
-    # check that every zarr store's spatial dimensions have the same shape 
-    for ds in datasets[1:]:
-        for dim in spatial_dims:
-            if datasets[0][dim].shape != ds[dim].shape:
-                print_issue("spatial dimension shapes", datasets[0], ds)
-                checks_failed += 1
-        
-    # check that all of the values in the spatial dimensions are exactly the same
-    for ds in datasets[1:]:
-        for dim in spatial_dims:
-            if not np.array_equal(datasets[0][dim].values, ds[dim].values):
-                print_issue("spatial dimension values", datasets[0], ds)
-                checks_failed += 1
+    # Check 2
+    different_datasets = find_different_datasets(datasets, check_vars_same_name)
+    msgs = ["Variables do not have the same name across all datasets.", "Variables have the same name across all datasets."]
+    summary_msg += get_check_msg(different_datasets, datasets, 1, checks_passed, msgs)
 
+    # Check 3
+    different_datasets = find_different_datasets(datasets, check_time)
+    msgs = ["Time coordinates are not monotonic or do not use the same calendar across all datasets.", "Time coordinates are monotonic and use the same calendar across all datasets."]
+    summary_msg += get_check_msg(different_datasets, datasets, 2, checks_passed, msgs)
 
+    # Check 4
+    different_datasets = find_different_datasets(datasets, check_units)
+    msgs = ["Units are not equivalent across all datasets.", "Units are equivalent across all datasets."]
+    summary_msg += get_check_msg(different_datasets, datasets, 3, checks_passed, msgs)
+
+    print(f"\n\nSUMMARY: {int(sum(checks_passed))}/{len(checks_passed)} checks passed.")
+    print("=============================================================")
+    print(summary_msg)
 
 
 
