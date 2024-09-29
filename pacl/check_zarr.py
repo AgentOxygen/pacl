@@ -16,12 +16,12 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import numpy as np
 
-def check_single(path: str, debugging: False):
+def check_single(path: str, verbose: False):
     """Check a single zarr store"""
 
     ds = xr.open_zarr(path)
     
-    if debugging:
+    if verbose:
         print("Checking single zarr store: ", path)
         print(ds) 
         print("\n\n")
@@ -43,11 +43,10 @@ def check_single(path: str, debugging: False):
 
     # TASK 1
     # TODO: will there ever be more than one valid data variable in a zarr store?
-    if debugging: 
+    if verbose: 
         print(data)
         print()
 
-    # TODO: all possible spatial dimensions are ? Check if all of the data variable actually has all of these dimensions? 
     possible_spatial_dims = ["lat", "lon", "lev", "latitude", "longitude", "level"]
     spatial_dims = [dim for dim in possible_spatial_dims if dim in data.dims]
     other_dimensions = [dim for dim in data.dims if dim not in spatial_dims and dim != 'time']
@@ -111,16 +110,66 @@ def check_single(path: str, debugging: False):
     plt.figtext(0.5, 0, f"Plot generated for {path}", horizontalalignment='center', fontsize=7) 
     plt.show() 
 
+def print_issue(issue: str, ds1: xr.Dataset, ds2: xr.Dataset):
+    print(f"Not all zarr stores have the same {issue}. Here is the information for two of the problematic zarr stores.")
+    print("First dataset information: ")
+    print(ds1.info())
+    print("\n\n")
+    print("Second dataset information: ")
+    print(ds2.info())
+    
+def check_spatial_coords(ds1: xr.Dataset, ds2: xr.Dataset) -> bool:
+    # Check that the spatial coordinates (lat, lon, lev) are equivalent in shape and value.
+
+    possible_spatial_dims = ["lat", "lon", "lev", "latitude", "longitude", "level"]
+    spatial_dims = [dim for dim in possible_spatial_dims if dim in ds1.dims]
 
 
-def check_zarr(paths: str | list, debugging: False): # Definitely add more optional parameters as you see fit
+def check_paths(paths: list, verbose: False):
+    
+    datasets = []
+    for path in paths:
+        ds = xr.open_zarr(path)
+        datasets.append(ds)
+
+    # Check 1 
+    possible_spatial_dims = ["lat", "lon", "lev", "latitude", "longitude", "level"]
+    spatial_dims = [dim for dim in possible_spatial_dims if dim in datasets[0].dims]
+    checks_failed = 0
+
+    # check that every zarr store has the same spatial dimensions
+    for ds in datasets[1:]:
+        if spatial_dims != [dim for dim in possible_spatial_dims if dim in ds.dims]:
+            print_issue("spatial dimensions", datasets[0], ds)
+            checks_failed += 1
+        
+    # check that every zarr store's spatial dimensions have the same shape 
+    for ds in datasets[1:]:
+        for dim in spatial_dims:
+            if datasets[0][dim].shape != ds[dim].shape:
+                print_issue("spatial dimension shapes", datasets[0], ds)
+                checks_failed += 1
+        
+    # check that all of the values in the spatial dimensions are exactly the same
+    for ds in datasets[1:]:
+        for dim in spatial_dims:
+            if not np.array_equal(datasets[0][dim].values, ds[dim].values):
+                print_issue("spatial dimension values", datasets[0], ds)
+                checks_failed += 1
+
+
+
+
+
+def check_zarr(paths: str | list, verbose: False): # Definitely add more optional parameters as you see fit
     """Willow, this is the function you will want to work on"""
     
     # Check if paths is a string or list
     if(isinstance(paths, str)):
-        check_single(paths, debugging)
+        check_single(paths, verbose)
     
-    
+    if(isinstance(paths, list)):
+        check_paths(paths, verbose)
     
     
 
