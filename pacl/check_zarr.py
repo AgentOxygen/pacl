@@ -18,6 +18,19 @@ import numpy as np
 from colorama import Fore, Style
 from typing import Callable
 
+class ZarrStore:
+    count = 0 
+
+    def __init__(self, path: str):
+        self.path = path
+        self.ds = xr.open_zarr(path)
+        ZarrStore.count += 1
+
+    def get_name(self):
+        # return only the name of the file, not the rest of the path
+        return self.path.split('/')[-1]
+
+
 
 def check_single(path: str, verbose: False):
     """Check a single zarr store"""
@@ -113,8 +126,11 @@ def check_single(path: str, verbose: False):
     plt.figtext(0.5, 0, f"Plot generated for {path}", horizontalalignment='center', fontsize=7) 
     plt.show() 
     
-def check_spatial_coords(ds1: xr.Dataset, ds2: xr.Dataset, verbose: bool) -> bool:
+def check_spatial_coords(store1: ZarrStore, store2: ZarrStore, verbose: bool) -> bool:
     # Check that the spatial coordinates (lat, lon, lev) are equivalent in shape and value.
+
+    ds1 = store1.ds
+    ds2 = store2.ds
 
     # Check that they have the same spatial dims
     possible_spatial_dims = ["lat", "lon", "lev", "latitude", "longitude", "level"]
@@ -146,8 +162,11 @@ def check_spatial_coords(ds1: xr.Dataset, ds2: xr.Dataset, verbose: bool) -> boo
         
     return True
 
-def check_vars_same_name(ds1: xr.Dataset, ds2: xr.Dataset, verbose: bool) -> bool:
+def check_vars_same_name(store1: ZarrStore, store2: ZarrStore, verbose: bool) -> bool:
     # Check that the variables in the datasets have the same name
+    
+    ds1 = store1.ds
+    ds2 = store2.ds
 
     vars_1 = list(ds1.data_vars.keys())
     vars_2 = list(ds2.data_vars.keys())
@@ -164,9 +183,12 @@ def check_vars_same_name(ds1: xr.Dataset, ds2: xr.Dataset, verbose: bool) -> boo
 
     return True
 
-def check_time(ds1: xr.Dataset, ds2: xr.Dataset, verbose: bool) -> bool:
+def check_time(store1: ZarrStore, store2: ZarrStore, verbose: bool) -> bool:
     # Check that the time coordinates are monotonic and that all datasets use the same calendar
     
+    ds1 = store1.ds
+    ds2 = store2.ds
+
     if not ds1.time.to_index().is_monotonic_increasing:
         return False
     
@@ -178,10 +200,13 @@ def check_time(ds1: xr.Dataset, ds2: xr.Dataset, verbose: bool) -> bool:
     
     return True
 
-def check_units(ds1: xr.Dataset, ds2: xr.Dataset, verbose: bool) -> bool:
+def check_units(store1: ZarrStore, store2: ZarrStore, verbose: bool) -> bool:
     # Check that the units attributes are equivalent for each variable in all datasets
 
-    if not check_vars_same_name(ds1, ds2, False):
+    ds1 = store1.ds
+    ds2 = store2.ds
+
+    if not check_vars_same_name(store1, store2, False):
         if verbose: 
             print(Fore.CYAN + f"Check 4 Err Output: ")
             print(f"The data variables NOT the same, so the units check fails by default."  + Style.RESET_ALL)
@@ -211,16 +236,16 @@ def find_majority_ds(datasets: list, check_equiv: Callable, verbose: bool) -> in
     # This function will be used to determine which dataset to compare the others to
     # We will compare all datasets to the majority dataset to ensure that they are equivalent
 
-    majority_ds = -1 
+    majority_ds = None
     counter = 0
 
-    for i, ds in enumerate(datasets): 
+    for ds in datasets: 
         if counter == 0:
-            majority_ds = i
+            majority_ds = ds
             counter += 1
             continue
 
-        if check_equiv(datasets[majority_ds], ds, False):
+        if check_equiv(majority_ds, ds, False):
             counter += 1
         else:
             counter -= 1
@@ -228,11 +253,11 @@ def find_majority_ds(datasets: list, check_equiv: Callable, verbose: bool) -> in
     # count if majority_ds is actually the majority 
     counter = 0
     for ds in datasets:
-        if check_equiv(datasets[majority_ds], ds, verbose):
+        if check_equiv(majority_ds, ds, verbose):
             counter += 1
     
     if counter <= len(datasets) / 2:
-        return -1
+        return None
 
     return majority_ds
 
@@ -240,29 +265,29 @@ def find_different_datasets(datasets: list, check_equiv: Callable, verbose: bool
     # Find the datasets that are different from the majority dataset
     # It will return [-1] if no majority dataset is found
     majority_ds = find_majority_ds(datasets, check_equiv, verbose)
-    if majority_ds == -1:
-        return [-1]
+    if majority_ds == None:
+        return [None]
 
     different_datasets = []
-    for i, ds in enumerate(datasets):
-        if not check_equiv(datasets[majority_ds], ds, False):
-            different_datasets.append(i)
+    for ds in datasets:
+        if not check_equiv(majority_ds, ds, False):
+            different_datasets.append(ds)
 
     return different_datasets
 
-def get_check_msg(different_datasets: list, datasets: list, check_num: int, checks: list, msgs: list) -> str: 
-    # The first msg is what it say if the check failed. The second msg is what it says if the check passed
+def get_check_msg(different_datasets: list, check_num: int, checks: list, msgs: list) -> str: 
+    # The first msg is what it should say if the check failed. The second msg is what it says if the check passed
 
-    if different_datasets == [-1]:
+    if different_datasets == [None]:
         checks[check_num] = False
         check_msg = Fore.RED + f"Check {check_num+1} failed: {msgs[0]} A majority of them are different from each other.\n" + Style.RESET_ALL
     elif len(different_datasets) == 0:
         checks[check_num] = True
         check_msg = Fore.GREEN + f"Check {check_num+1} passed: {msgs[1]}\n" + Style.RESET_ALL
     else: 
-        dataset_names = [datasets[i] for i in different_datasets]
+        dataset_names = [ds.get_name() for ds in different_datasets]
         checks[check_num] = False
-        check_msg = Fore.RED + f"Check {check_num+1} failed: {msgs[0]} The following datasets ({len(different_datasets)}/{len(datasets)}) are different from the majority opinion: " + str(dataset_names) + "\n" + Style.RESET_ALL
+        check_msg = Fore.RED + f"Check {check_num+1} failed: {msgs[0]} The following datasets ({len(different_datasets)}/{different_datasets[0].count}) are different from the majority opinion: " + str(dataset_names) + "\n" + Style.RESET_ALL
 
     return check_msg
 
@@ -275,28 +300,27 @@ def check_paths(paths: list, verbose: False):
     
     datasets = []
     for path in paths:
-        ds = xr.open_zarr(path)
-        datasets.append(ds)
+        datasets.append(ZarrStore(path))
 
     # Check 1 
     different_datasets = find_different_datasets(datasets, check_spatial_coords, verbose)
     msgs = ["Spatial coordinates are not equivalent across all datasets.", "Spatial coordinates are equivalent across all datasets."]
-    summary_msg += get_check_msg(different_datasets, paths, 0, checks_passed, msgs)
+    summary_msg += get_check_msg(different_datasets, 0, checks_passed, msgs)
 
     # Check 2
     different_datasets = find_different_datasets(datasets, check_vars_same_name, verbose)
     msgs = ["Variables do not have the same name across all datasets.", "Variables have the same name across all datasets."]
-    summary_msg += get_check_msg(different_datasets, datasets, 1, checks_passed, msgs)
+    summary_msg += get_check_msg(different_datasets, 1, checks_passed, msgs)
 
     # Check 3
     different_datasets = find_different_datasets(datasets, check_time, verbose)
     msgs = ["Time coordinates are not monotonic or do not use the same calendar across all datasets.", "Time coordinates are monotonic and use the same calendar across all datasets."]
-    summary_msg += get_check_msg(different_datasets, datasets, 2, checks_passed, msgs)
+    summary_msg += get_check_msg(different_datasets, 2, checks_passed, msgs)
 
     # Check 4
     different_datasets = find_different_datasets(datasets, check_units, verbose)
     msgs = ["Units are not equivalent across all datasets.", "Units are equivalent across all datasets."]
-    summary_msg += get_check_msg(different_datasets, datasets, 3, checks_passed, msgs)
+    summary_msg += get_check_msg(different_datasets, 3, checks_passed, msgs)
 
     print(f"\n\nSUMMARY: {int(sum(checks_passed))}/{len(checks_passed)} checks passed.")
     print("=============================================================")
