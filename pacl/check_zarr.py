@@ -262,7 +262,7 @@ def get_check_msg(different_datasets: list, datasets: list, check_num: int, chec
     else: 
         dataset_names = [datasets[i] for i in different_datasets]
         checks[check_num] = False
-        check_msg = f"Check {check_num+1} failed: {msgs[0]} The following datasets ({len(different_datasets)} / {len(datasets)}) are different from the majority dataset: " + str(dataset_names) + "\n"
+        check_msg = Fore.RED + f"Check {check_num+1} failed: {msgs[0]} The following datasets ({len(different_datasets)}/{len(datasets)}) are different from the majority opinion: " + str(dataset_names) + "\n" + Style.RESET_ALL
 
     return check_msg
 
@@ -281,7 +281,7 @@ def check_paths(paths: list, verbose: False):
     # Check 1 
     different_datasets = find_different_datasets(datasets, check_spatial_coords, verbose)
     msgs = ["Spatial coordinates are not equivalent across all datasets.", "Spatial coordinates are equivalent across all datasets."]
-    summary_msg += get_check_msg(different_datasets, datasets, 0, checks_passed, msgs)
+    summary_msg += get_check_msg(different_datasets, paths, 0, checks_passed, msgs)
 
     # Check 2
     different_datasets = find_different_datasets(datasets, check_vars_same_name, verbose)
