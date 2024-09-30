@@ -29,6 +29,12 @@ class ZarrStore:
     def get_name(self):
         # return only the name of the file, not the rest of the path
         return self.path.split('/')[-1]
+    
+    # def __str__(self):
+    #     return self.path.split('/')[-1]
+
+    def __del__(self):
+        ZarrStore.count -= 1
 
 
 
@@ -154,6 +160,7 @@ def check_spatial_coords(store1: ZarrStore, store2: ZarrStore, verbose: bool) ->
         if not np.array_equal(ds1[dim].values, ds2[dim].values):
             if verbose: 
                 print(Fore.CYAN + f"Check 1 Err Output: ")
+                print(f"Comparing {store1.get_name()} and {store2.get_name()}")
                 print(f"The {dim} dimension does not have the same values. (It's possible that more dimensions also do not have the same values.) Here are the first 10 values that are different: "  + Style.RESET_ALL)
                 for index in np.where(ds1[dim].values != ds2[dim].values)[0][:10]:
                     print(f"{ds1[dim].values[index]} != {ds2[dim].values[index]} (index {index})")
@@ -174,6 +181,7 @@ def check_vars_same_name(store1: ZarrStore, store2: ZarrStore, verbose: bool) ->
     if vars_1 != vars_2:
         if verbose: 
             print(Fore.CYAN + f"Check 2 Err Output: ")
+            print(f"Comparing {store1.get_name()} and {store2.get_name()}")
             print(f"The data variable names are NOT the same. Here are the names: "  + Style.RESET_ALL)
             print(vars_1)
             print(vars_2)
@@ -209,6 +217,7 @@ def check_units(store1: ZarrStore, store2: ZarrStore, verbose: bool) -> bool:
     if not check_vars_same_name(store1, store2, False):
         if verbose: 
             print(Fore.CYAN + f"Check 4 Err Output: ")
+            print(f"Comparing {store1.get_name()} and {store2.get_name()}")
             print(f"The data variables NOT the same, so the units check fails by default."  + Style.RESET_ALL)
             print()
         return False
@@ -223,6 +232,7 @@ def check_units(store1: ZarrStore, store2: ZarrStore, verbose: bool) -> bool:
             return False
         if ds1[var].attrs["units"] != ds2[var].attrs["units"]:
             print(Fore.CYAN + f"Check 4 Err Output: ")
+            print(f"Comparing {store1.get_name()} and {store2.get_name()}")
             print(f"The units for the {var} variable are not the same. "  + Style.RESET_ALL)
             print(f"Units for {var} in the first dataset: {ds1[var].attrs['units']}")
             print(f"Units for {var} in the second dataset: {ds2[var].attrs['units']}")
@@ -293,6 +303,7 @@ def get_check_msg(different_datasets: list, check_num: int, checks: list, msgs: 
 
 
 def check_paths(paths: list, verbose: False):
+    # print(len(paths))
     num_checks = 4    
 
     checks_passed = np.zeros(num_checks)
